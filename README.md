@@ -85,8 +85,14 @@ Once you have the data, regenerate them yourself and go further:
 
 ```bash
 python starter/baseline.py                              # rebuild the four baselines
+python starter/extract_features.py                      # write ATD features to features/
 python evaluation/validate_submission.py <your>.csv     # before every submission
 ```
+
+The feature extractor writes one row per tactical video frame, with tracking positions in metres,
+team geometry, nearest-player distances, ball visibility and gap length, and ball speed and
+acceleration when consecutive observations are available. The generated `features/` directory is
+gitignored; do not commit match-derived outputs.
 
 **Validate every file before you submit it.** `validate_submission.py` runs exactly the checks the
 official scorer runs, and a file that fails them is dropped from the board with a one-line reason.
@@ -134,6 +140,7 @@ evaluation/
   results/                  the four baselines; put your submissions here
 starter/
   baseline.py               the reference baseline, numpy only
+  extract_features.py       extract per-frame ATD features for the possession pipeline
   load_atd.py               read the tracking and line it up with video frames
   load_smart_tagging.py     read the tactical tagging as video-frame intervals
   load_homography.py        read the homography; project pitch <-> pixels
