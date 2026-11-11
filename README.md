@@ -86,6 +86,7 @@ Once you have the data, regenerate them yourself and go further:
 ```bash
 python starter/baseline.py                              # rebuild the four baselines
 python starter/extract_features.py                      # write ATD features to features/
+python run.py                                             # provisional baseline -> validated CSV
 python evaluation/validate_submission.py <your>.csv     # before every submission
 ```
 
@@ -93,6 +94,11 @@ The feature extractor writes one row per tactical video frame, with tracking pos
 team geometry, nearest-player distances, ball visibility and gap length, and ball speed and
 acceleration when consecutive observations are available. The generated `features/` directory is
 gitignored; do not commit match-derived outputs.
+
+`run.py` currently wires those features to a smoothed nearest-player baseline and validates its
+CSV automatically. It is an integration check and a provisional benchmark, not the team's final
+possession model; replace its predictor when that model is ready. The default output is
+`evaluation/results/member1_provisional.csv`, which is gitignored.
 
 **Validate every file before you submit it.** `validate_submission.py` runs exactly the checks the
 official scorer runs, and a file that fails them is dropped from the board with a one-line reason.
@@ -149,6 +155,7 @@ starter/
   02_tracking_atd.ipynb     guided tour of the tracking data, with plots
   03_first_submission.ipynb data in, scored submission out — start here
 data/                       unpack the downloaded match assets here. Empty in a fresh clone
+run.py                      provisional end-to-end feature → baseline → validated CSV runner
 ```
 
 The scorer you run locally is the scorer that decides the competition. If it scores on your
