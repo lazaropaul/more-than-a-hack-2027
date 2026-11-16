@@ -95,10 +95,11 @@ team geometry, nearest-player distances, ball visibility and gap length, and bal
 acceleration when consecutive observations are available. The generated `features/` directory is
 gitignored; do not commit match-derived outputs.
 
-`run.py` currently wires those features to a smoothed nearest-player baseline and validates its
-CSV automatically. It is an integration check and a provisional benchmark, not the team's final
-possession model; replace its predictor when that model is ready. The default output is
-`evaluation/results/member1_provisional.csv`, which is gitignored.
+`run.py` runs the Furbito possession pipeline and validates its CSV automatically. It combines
+nearest-player evidence, automatic Smart Tagging, a temporal switch filter and carry-forward
+through uncertain gaps within each half. The default output is `evaluation/results/furbito.csv`,
+which is gitignored. See [furbito.md](furbito.md) for the technical description and reproduction
+instructions.
 
 **Validate every file before you submit it.** `validate_submission.py` runs exactly the checks the
 official scorer runs, and a file that fails them is dropped from the board with a one-line reason.
