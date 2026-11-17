@@ -1,79 +1,96 @@
 """End to end: tracking in, one label per video frame out.
 
-    evidence  ->  emissions  ->  Viterbi per half  ->  labels (X outside the graded halves)
+    ball control  --+
+    team shape    --+--> team log-odds --+
+                                         +--> emissions --> Viterbi per half --> labels
+    dead-ball detector -> dead log-odds -+
 
-All tunable numbers live in PARAMS, with the physical reasoning beside each one. None of them
-were fitted to any ground truth.
+All tunable numbers live in PARAMS, with the reasoning beside each one. None of them was fitted to
+any ground truth. They come from physical scales or from the components' own self-supervised
+calibration, and tools/sensitivity.py checks they sit on plateaus.
 """
+
+import hashlib
+import os
 
 import numpy as np
 
-from . import decoder, features
+from . import decoder, deadball, features, team_shape
+from .data import DATA_DIR
 
 PARAMS = {
-    # Switching costs, in nats. A possession change has to be paid for by roughly this much
-    # accumulated evidence. With ~1 nat per frame of clear control that is ~1/3 s of clear,
-    # sustained control by the other team, the "controlled, not a touch" threshold.
+    # Switching costs, in nats: a change has to be paid for by roughly this much accumulated
+    # evidence. With ~1 nat per frame of clear ball control, a possession change needs about 1/3 s
+    # of clear, sustained control by the other team, the "controlled, not a touch" threshold.
     "switch_cost": 8.0,
-    # Entering or leaving a stoppage: one stoppage needs both. Higher than a switch because a
-    # stoppage has its own strong evidence (ball out, play frozen).
-    "to_dead_cost": 12.0,
-    "from_dead_cost": 12.0,
+    # Entering or leaving a stoppage. Dead-ball evidence is smooth and long-lived, so a stoppage
+    # needs ~2-3 s of clear dead evidence at dead_weight (the detector's own recommendation is
+    # alpha 0.1-0.2 with C 5-10).
+    "to_dead_cost": 8.0,
+    "from_dead_cost": 8.0,
     # Ball-track control evidence (features.ball_team_logodds).
     "control_gain": 1.0,
     "near_gain": 0.1,
-    # Placeholder dead-ball evidence (replaced by possession.deadball when present).
-    "out_gain": 2.0,               # per frame with the ball past a line
-    "activity_center": 0.9,        # m/s mean player speed where alive and dead are equally likely
-    "activity_scale": 0.2,         # m/s
-    "activity_gain": 0.15,         # per frame, after clipping to +/-4
-    "activity_window": 25,         # frames, half-width of the moving average
+    # Player-only team-shape log-odds (team_shape). It is calibrated per frame but heavily
+    # autocorrelated, so it is down-weighted. More weight where the ball is unseen, where it is the
+    # only team evidence; little where ball control already decides the boundaries.
+    "shape_clip": 4.0,
+    "shape_weight_seen": 0.03,
+    "shape_weight_unseen": 0.08,
+    # Dead-ball log-odds (deadball), clipped so formation/kick-off stacks cannot drown the rest.
+    "dead_clip": 6.0,
+    "dead_weight": 0.15,
 }
 
-
-def moving_nanmean(x, half):
-    """Centred moving mean over +/- half frames, ignoring NaN."""
-    ok = ~np.isnan(x)
-    v = np.where(ok, x, 0.0)
-    cs = np.concatenate(([0.0], np.cumsum(v)))
-    cn = np.concatenate(([0], np.cumsum(ok)))
-    idx = np.arange(len(x))
-    lo = np.maximum(0, idx - half)
-    hi = np.minimum(len(x), idx + half + 1)
-    n = cn[hi] - cn[lo]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        return np.where(n > 0, (cs[hi] - cs[lo]) / n, np.nan)
+CACHE_VERSION = 1
 
 
-def placeholder_dead_logodds(m, feats, p):
-    """Simple dead-ball evidence: ball past a line, or the whole pitch walking."""
-    speed = np.hypot(*np.moveaxis(features.velocity(m.players), -1, 0))
-    with np.errstate(invalid="ignore"):
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            mean_speed = np.nanmean(speed, axis=1)
-    activity = moving_nanmean(mean_speed, p["activity_window"])
-    lo = p["activity_gain"] * np.clip(
-        (p["activity_center"] - np.nan_to_num(activity, nan=p["activity_center"]))
-        / p["activity_scale"], -4, 4)
-    lo = lo + p["out_gain"] * feats["out"]
-    return lo
+def _shape_cache_path(m):
+    """Cache key: the exact tracking arrays and the shape module's source."""
+    h = hashlib.sha1()
+    h.update(np.ascontiguousarray(m.players[::97]).tobytes())
+    h.update(np.ascontiguousarray(m.ball).tobytes())
+    with open(team_shape.__file__, "rb") as handle:
+        h.update(handle.read())
+    return os.path.join(DATA_DIR, "_cache", "shape_v{}_{}.npy".format(CACHE_VERSION,
+                                                                     h.hexdigest()[:16]))
 
 
-def evidence(m, params=None):
-    """Dict of per-frame log-odds streams. Each is a named, inspectable input to the decoder."""
+def shape_logodds(m, use_cache=True):
+    """team_shape.team_shape_logodds, cached (it trains a model: ~2 min)."""
+    path = _shape_cache_path(m)
+    if use_cache and os.path.isfile(path):
+        return np.load(path)
+    z = team_shape.team_shape_logodds(m)
+    if use_cache:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        np.save(path, z)
+    return z
+
+
+def evidence(m, params=None, cache=None):
+    """Dict of per-frame log-odds streams, each a named, inspectable decoder input.
+
+    `cache` (a dict) keeps the expensive, parameter-free components between calls.
+    """
     p = dict(PARAMS, **(params or {}))
-    feats = features.ball_features(m)
-    return {
-        "team": features.ball_team_logodds(feats, p["control_gain"], p["near_gain"]),
-        "dead": placeholder_dead_logodds(m, feats, p),
-    }, feats
+    cache = {} if cache is None else cache
+    if "feats" not in cache:
+        cache["feats"] = features.ball_features(m)
+        cache["shape"] = shape_logodds(m)
+        cache["dead"] = deadball.dead_ball_logodds(m)
+    feats = cache["feats"]
+
+    ball = features.ball_team_logodds(feats, p["control_gain"], p["near_gain"])
+    shape_w = np.where(feats["seen"], p["shape_weight_seen"], p["shape_weight_unseen"])
+    shape = shape_w * np.clip(cache["shape"], -p["shape_clip"], p["shape_clip"])
+    dead = p["dead_weight"] * np.clip(cache["dead"], -p["dead_clip"], p["dead_clip"])
+    return {"ball": ball, "shape": shape, "team": ball + shape, "dead": dead}
 
 
-def run(m, params=None):
+def run(m, params=None, cache=None):
     p = dict(PARAMS, **(params or {}))
-    ev, _ = evidence(m, p)
+    ev = evidence(m, p, cache)
     em = decoder.emissions(ev["team"], ev["dead"])
     cost = decoder.transition_costs(p["switch_cost"], p["to_dead_cost"], p["from_dead_cost"])
     return decoder.decode_halves(em, m.halves, cost, m.n_frames)
@@ -82,6 +99,7 @@ def run(m, params=None):
 def summarize(labels, halves, fps=25):
     """Possession count, mean duration and label shares over the graded halves. No GT involved."""
     n_poss, durs, counts = 0, [], {"H": 0, "A": 0, "D": 0}
+    n_dead = 0
     for _, first, last in halves:
         seg = labels[first:last + 1]
         for k in counts:
@@ -93,10 +111,13 @@ def summarize(labels, halves, fps=25):
             if seg[s] in ("H", "A"):
                 n_poss += 1
                 durs.append((e - s) / fps)
+            elif seg[s] == "D":
+                n_dead += 1
     total = sum(counts.values())
     return {
         "possessions": n_poss,
-        "mean_possession_s": float(np.mean(durs)) if durs else 0.0,
-        "median_possession_s": float(np.median(durs)) if durs else 0.0,
+        "stoppages": n_dead,
+        "mean_possession_s": round(float(np.mean(durs)), 2) if durs else 0.0,
+        "median_possession_s": round(float(np.median(durs)), 2) if durs else 0.0,
         "share": {k: round(v / total, 3) for k, v in counts.items()},
     }

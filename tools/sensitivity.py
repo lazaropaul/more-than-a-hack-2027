@@ -38,7 +38,8 @@ def main():
 
     match = load_match()
     base_params = dict(pipeline.PARAMS)
-    base = pipeline.run(match, base_params)
+    cache = {}
+    base = pipeline.run(match, base_params, cache)
     base_codes = as_codes(base)
     s = pipeline.summarize(base, match.halves)
     print("base: {} possessions, mean {:.1f} s, shares {}".format(
@@ -53,7 +54,7 @@ def main():
             value = base_params[name] * f
             if isinstance(base_params[name], int):
                 value = int(round(value))
-            labels = pipeline.run(match, dict(base_params, **{name: value}))
+            labels = pipeline.run(match, dict(base_params, **{name: value}), cache)
             r = pm.evaluate(base_codes, as_codes(labels))
             s = pipeline.summarize(labels, match.halves)
             print("{:<22} {:>6.2f} {:>8.3f} {:>8.3f} {:>6d} {:>6.3f}".format(
