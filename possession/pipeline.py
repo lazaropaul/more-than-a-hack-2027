@@ -24,8 +24,9 @@ PARAMS = {
     # of clear, sustained control by the other team, the "controlled, not a touch" threshold.
     "switch_cost": 8.0,
     # Entering or leaving a stoppage. Dead-ball evidence is smooth and long-lived, so a stoppage
-    # needs ~2-3 s of clear dead evidence at dead_weight (the detector's own recommendation is
-    # alpha 0.1-0.2 with C 5-10).
+    # needs ~2-3 s of clear dead evidence at dead_weight. tools/deadball_calibration.py shows the
+    # dead stream alone gives a stable ~50% dead share and ~120 stoppages for weight 0.1-0.2 with
+    # a cost of 5-10 nats.
     "to_dead_cost": 8.0,
     "from_dead_cost": 8.0,
     # Ball-track control evidence (features.ball_team_logodds).
@@ -42,16 +43,28 @@ PARAMS = {
     "dead_weight": 0.15,
 }
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def _shape_cache_path(m):
-    """Cache key: the exact tracking arrays and the shape module's source."""
+    """Cache key: every input team_shape reads, the code that produces them, and library versions.
+
+    The tracking arrays, slot teams, halves, attack directions and pitch; the source of the shape
+    model and of the loader; numpy / scipy / scikit-learn versions. Anything else that changes
+    the model output would be a code change in one of those two files.
+    """
+    import scipy
+    import sklearn
+    from . import data
     h = hashlib.sha1()
-    h.update(np.ascontiguousarray(m.players[::97]).tobytes())
+    h.update(np.ascontiguousarray(m.players).tobytes())
     h.update(np.ascontiguousarray(m.ball).tobytes())
-    with open(team_shape.__file__, "rb") as handle:
-        h.update(handle.read())
+    h.update(np.ascontiguousarray(m.team).tobytes())
+    h.update(repr((m.halves, sorted(m.home_defends_left.items()), m.pitch)).encode())
+    h.update(repr((np.__version__, scipy.__version__, sklearn.__version__)).encode())
+    for module in (team_shape, data):
+        with open(module.__file__, "rb") as handle:
+            h.update(handle.read())
     return os.path.join(DATA_DIR, "_cache", "shape_v{}_{}.npy".format(CACHE_VERSION,
                                                                      h.hexdigest()[:16]))
 
