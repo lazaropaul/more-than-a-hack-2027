@@ -2,6 +2,9 @@
 
 Team **yeeclaw**, More than a Hack 2027, Phase 1.
 
+A longer walkthrough of every feature, with worked numbers, is in
+[docs/FEATURES.md](docs/FEATURES.md).
+
 ## 1. Approach in one paragraph
 
 We treat possession as a **segmentation** problem, not a per-frame classification, because the
