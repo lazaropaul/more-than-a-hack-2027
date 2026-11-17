@@ -18,7 +18,7 @@ sys.path.insert(0, ROOT)
 from possession import pipeline  # noqa: E402
 from possession.data import load_match  # noqa: E402
 
-DEFAULT_NAME = "furbito"
+DEFAULT_NAME = "yeeclaw"
 RESULTS_DIR = os.path.join(ROOT, "evaluation", "results")
 
 

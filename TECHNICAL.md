@@ -1,6 +1,6 @@
 # Ball possession from automatic tracking: technical document
 
-Team **furbito**, More than a Hack 2027, Phase 1.
+Team **yeeclaw**, More than a Hack 2027, Phase 1.
 
 ## 1. Approach in one paragraph
 
@@ -173,7 +173,7 @@ any frame of any match.
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-pipeline.txt
 # data bundle unpacked into ./data (data/tactical/BAR-ATH_tactical_atd.txt [+ .xml]) or MTAH_DATA_DIR
-.venv/bin/python make_submission.py            # -> evaluation/results/furbito.csv, then validates it
+.venv/bin/python make_submission.py            # -> evaluation/results/yeeclaw.csv, then validates it
 ```
 
 About 70 s cold, of which ~60 s is training the shape model (cached in `data/_cache/`), and about
