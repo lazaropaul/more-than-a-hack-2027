@@ -9,7 +9,9 @@ Self-contained (numpy + scipy). Entry point:
 decoder can re-weight them; `dead_ball_logodds` is their sum (the ball_context term carries the prior).
 
 Every scale below is a physical one (metres, seconds, m/s) or a football prior; nothing refers to
-specific frames of any match. 25 fps is read from FPS.
+specific frames of any match. 25 fps is read from FPS. The constants estimated from data (activity
+logistic, ball-context curves) are re-derived from the ATD alone, with no ground truth, by
+tools/deadball_calibration.py.
 """
 
 import numpy as np
@@ -27,13 +29,14 @@ P = dict(
     max_player_speed=11.0,    # m/s; faster = tracklet identity switch, discarded
     max_ball_speed=40.0,      # m/s; faster = detection teleport, discarded
     act_window=2.0,           # s, centred smoothing of collective activity
-    # activity LLR: logistic in "top-5 mean player speed" (m/s); balanced anchor fit gave
-    # slope 1.45 /(m/s), centre 3.17 m/s
+    # activity LLR: logistic in "top-5 mean player speed" (m/s); class-balanced logistic fit on
+    # algorithmic anchors gives slope ~1.4 /(m/s), centre 3.15 m/s (tools/deadball_calibration.py)
     act_centre=3.15,
     act_slope=1.5,
     act_cap=2.5,
     # ball seen in bounds: context log-odds as a function of ball speed (m/s), piecewise linear,
-    # from the self-supervised mixture estimate (shrunk towards 0, see notes)
+    # from the self-supervised mixture estimate in tools/deadball_calibration.py, shrunk towards 0
+    # by ~1 nat at the extremes because that estimate is partly circular
     ctx_speed_knots=(0.4, 1.4, 2.75, 4.25, 6.5),
     ctx_speed_logit=(1.0, -0.2, -1.4, -2.3, -2.8),
     ball_speed_window=0.6,    # s smoothing of ball speed for the context
@@ -58,9 +61,12 @@ P = dict(
     ko_max_viol=1,            # players per team allowed on the wrong side (the kicker)
     ko_min_dur=1.0,           # s
     ko_weight=4.0,            # nats inside a formation run
-    ko_merge=4.0,             # s; formation runs closer than this are merged
+    ko_merge=30.0,            # s; formation runs closer than this are merged: a line-up breaks
+                              # and re-forms for tens of seconds before the whistle
     prekick_search=8.0,       # minutes into a graded half to look for the opening kickoff
     prekick_weight=3.0,       # nats from half start to the opening kickoff
+    prekick_extend=3.0,       # s; after the formation, stay dead while the ball sits on the spot
+    centre_radius=2.0,        # m; 'on the centre spot'
     # tracked-player count drop
     cnt_ref=20.0,             # players
     cnt_slope=0.15,           # nats per missing player below cnt_ref
@@ -215,8 +221,22 @@ def prekick_mask(m, form, p=P):
         cand = [(a, b) for a, b in zip(s, e) if b > first and a < lim and b <= last]
         if cand:
             a, b = cand[0]
+            # The formation can dissolve a moment before the kick; stay dead while the ball is
+            # still seen resting on the centre spot (up to prekick_extend).
+            b = min(b + _ball_on_centre_run(m, b, p), last + 1)
             out[first:b] = True
     return out
+
+
+def _ball_on_centre_run(m, start, p):
+    """Frames from `start` during which the ball is seen still on the centre spot."""
+    L, W = m.pitch
+    end = min(start + int(p["prekick_extend"] * FPS), m.n_frames)
+    B = m.ball[start:end].astype(np.float64)
+    with np.errstate(invalid="ignore"):
+        on = np.hypot(B[:, 0] - L / 2, B[:, 1] - W / 2) < p["centre_radius"]
+    off = np.flatnonzero(~on)
+    return int(off[0]) if len(off) else len(on)
 
 
 # ---------------------------------------------------------------------------------------------

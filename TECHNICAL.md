@@ -97,12 +97,16 @@ A naive-Bayes sum of physically scaled terms, in nats:
 - **stationary ball.** Over 1 s, with a bonus at restart locations (touchline, corner, goal area,
   centre and penalty spots).
 - **kick-off formation.** Both teams in their own halves with the ball at the centre spot.
-- **pre-kick-off stretch.** From the start of each graded half to the first detected kick-off
-  formation. This is how the 2nd half's long dead opening is found **without hard-coding any frame**.
+- **pre-kick-off stretch.** From the start of each graded half to the end of the first detected
+  kick-off line-up. Formation runs less than 30 s apart are merged, because a line-up breaks and
+  re-forms before the whistle. This is how the 2nd half's long dead opening is found **without
+  hard-coding any frame**.
 - **tracked-player count drop.**
 
 Validated without labels by leave-one-cue-out AUC: player cues on ball-defined anchors 0.86, ball
-cues on player-defined anchors 0.93.
+cues on player-defined anchors 0.93. `tools/deadball_calibration.py` re-derives every
+data-estimated constant from the ATD alone: the anchor sets, these AUCs, the activity logistic fit,
+the mixture estimate of P(dead) per ball context, and the weight/cost behaviour.
 
 ### 4.5 Decoder (`possession/decoder.py`, `possession/pipeline.py`)
 - **Emissions:** H = ½·team − ½·dead, A = −½·team − ½·dead, D = ½·dead.
@@ -139,7 +143,7 @@ cues on player-defined anchors 0.93.
   compares the result with the base output using the official metric code, the base output acting
   as the reference. Values sit on plateaus (self-spellF1 ≥ 0.83 at ×2, ≥ 0.91 at ×0.75/×1.5).
 - **Football plausibility of the output:** 45% dead time (LaLiga effective playing time is
-  ~51–55 min of ~95), 115 stoppages (typical 100–120), 249 possessions.
+  ~51–55 min of ~95), 114 stoppages (typical 100–120), 248 possessions.
 
 The public 5 minutes were scored only to check that the pipeline was wired correctly. They were
 never used to choose between versions or values.
