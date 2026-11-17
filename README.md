@@ -1,5 +1,16 @@
 # More than a Hack 2027 — Phase 1: Ball Possession
 
+> **Team yeeclaw's submission.** To regenerate our possession file from the match data:
+>
+> ```bash
+> python3 -m venv .venv && .venv/bin/pip install -r requirements-pipeline.txt
+> .venv/bin/python make_submission.py          # -> evaluation/results/yeeclaw.csv, validated
+> ```
+>
+> Full instructions: **[docs/RUNNING.md](docs/RUNNING.md)** · how it works:
+> **[docs/FEATURES.md](docs/FEATURES.md)** · technical document: **[TECHNICAL.md](TECHNICAL.md)**.
+> The rest of this README is the organisers' original.
+
 **Organised by [Metrica Sports](https://metrica-sports.com), [FC Barcelona](https://www.fcbarcelona.com)
 and the [Mobile World Capital Barcelona](https://www.mwcbarcelona.com)**, at the Talent Arena in Barcelona.
 

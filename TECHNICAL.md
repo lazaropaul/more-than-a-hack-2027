@@ -180,4 +180,6 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-pipeline.txt
 ```
 
 About 70 s cold, of which ~60 s is training the shape model (cached in `data/_cache/`), and about
-5 s warm. The output is deterministic: byte-identical across cold runs.
+5 s warm. Peak memory is ~2.7 GB. The output is deterministic: a clean clone with a fresh
+environment and an empty cache reproduces the submitted file byte for byte. Step-by-step
+instructions, options and troubleshooting are in [docs/RUNNING.md](docs/RUNNING.md).
